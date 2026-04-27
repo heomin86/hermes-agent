@@ -32,6 +32,7 @@ import json
 import logging
 import re
 import inspect
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agent.memory_provider import MemoryProvider
@@ -92,6 +93,36 @@ class MemoryManager:
         self._providers: List[MemoryProvider] = []
         self._tool_to_provider: Dict[str, MemoryProvider] = {}
         self._has_external: bool = False  # True once a non-builtin provider is added
+        self._operation_status: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+    def _record_operation(
+        self,
+        provider: MemoryProvider,
+        operation: str,
+        status: str,
+        *,
+        detail: str = "",
+        error: Optional[BaseException] = None,
+    ) -> None:
+        entry: Dict[str, Any] = {
+            "status": status,
+            "detail": detail,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if error is not None:
+            entry["error_type"] = type(error).__name__
+            entry["error"] = str(error)
+        self._operation_status.setdefault(provider.name, {})[operation] = entry
+
+    def get_operation_status(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """Return the last observed memory operation status by provider."""
+        return {
+            provider_name: {
+                operation: dict(status)
+                for operation, status in operations.items()
+            }
+            for provider_name, operations in self._operation_status.items()
+        }
 
     # -- Registration --------------------------------------------------------
 
@@ -188,7 +219,15 @@ class MemoryManager:
                 result = provider.prefetch(query, session_id=session_id)
                 if result and result.strip():
                     parts.append(result)
+                    self._record_operation(
+                        provider, "prefetch", "succeeded", detail="returned_context"
+                    )
+                else:
+                    self._record_operation(
+                        provider, "prefetch", "succeeded", detail="empty"
+                    )
             except Exception as e:
+                self._record_operation(provider, "prefetch", "failed", error=e)
                 logger.debug(
                     "Memory provider '%s' prefetch failed (non-fatal): %s",
                     provider.name, e,
@@ -200,7 +239,9 @@ class MemoryManager:
         for provider in self._providers:
             try:
                 provider.queue_prefetch(query, session_id=session_id)
+                self._record_operation(provider, "queue_prefetch", "succeeded")
             except Exception as e:
+                self._record_operation(provider, "queue_prefetch", "failed", error=e)
                 logger.debug(
                     "Memory provider '%s' queue_prefetch failed (non-fatal): %s",
                     provider.name, e,
@@ -213,7 +254,9 @@ class MemoryManager:
         for provider in self._providers:
             try:
                 provider.sync_turn(user_content, assistant_content, session_id=session_id)
+                self._record_operation(provider, "sync_turn", "succeeded")
             except Exception as e:
+                self._record_operation(provider, "sync_turn", "failed", error=e)
                 logger.warning(
                     "Memory provider '%s' sync_turn failed: %s",
                     provider.name, e,
@@ -352,6 +395,9 @@ class MemoryManager:
         """
         for provider in self._providers:
             if provider.name == "builtin":
+                self._record_operation(
+                    provider, "on_memory_write", "skipped", detail="builtin_source"
+                )
                 continue
             try:
                 metadata_mode = self._provider_memory_write_metadata_mode(provider)
@@ -363,7 +409,9 @@ class MemoryManager:
                     provider.on_memory_write(action, target, content, dict(metadata or {}))
                 else:
                     provider.on_memory_write(action, target, content)
+                self._record_operation(provider, "on_memory_write", "succeeded")
             except Exception as e:
+                self._record_operation(provider, "on_memory_write", "failed", error=e)
                 logger.debug(
                     "Memory provider '%s' on_memory_write failed: %s",
                     provider.name, e,

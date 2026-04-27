@@ -249,6 +249,38 @@ class TestMemoryManager:
         # p1 failed but p2 still synced
         assert p2.synced_turns == [("user", "assistant")]
 
+    def test_operation_status_records_success_and_failure(self):
+        mgr = MemoryManager()
+        p1 = FakeMemoryProvider("builtin")
+        p1.prefetch = MagicMock(side_effect=RuntimeError("network error"))
+        p2 = FakeMemoryProvider("external")
+        p2._prefetch_result = "external memory"
+        mgr.add_provider(p1)
+        mgr.add_provider(p2)
+
+        mgr.prefetch_all("query")
+
+        status = mgr.get_operation_status()
+        assert status["builtin"]["prefetch"]["status"] == "failed"
+        assert status["builtin"]["prefetch"]["error_type"] == "RuntimeError"
+        assert "network error" in status["builtin"]["prefetch"]["error"]
+        assert status["external"]["prefetch"]["status"] == "succeeded"
+        assert status["external"]["prefetch"]["detail"] == "returned_context"
+
+    def test_operation_status_records_memory_write_skip_for_builtin(self):
+        mgr = MemoryManager()
+        builtin = FakeMemoryProvider("builtin")
+        external = FakeMemoryProvider("external")
+        mgr.add_provider(builtin)
+        mgr.add_provider(external)
+
+        mgr.on_memory_write("add", "memory", "remember this")
+
+        status = mgr.get_operation_status()
+        assert status["builtin"]["on_memory_write"]["status"] == "skipped"
+        assert status["builtin"]["on_memory_write"]["detail"] == "builtin_source"
+        assert status["external"]["on_memory_write"]["status"] == "succeeded"
+
     # -- Tool routing -------------------------------------------------------
 
     def test_tool_schemas_collected(self):

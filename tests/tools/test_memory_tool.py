@@ -247,6 +247,25 @@ class TestMemoryToolDispatcher:
     def test_add_via_tool(self, store):
         result = json.loads(memory_tool(action="add", target="memory", content="via tool", store=store))
         assert result["success"] is True
+        assert result["freshness"] == {
+            "durable": True,
+            "live_tool_state": True,
+            "system_prompt_refresh": "next_session_or_compression",
+        }
+
+    def test_replace_reports_freshness(self, store):
+        store.add("memory", "old value")
+        result = json.loads(
+            memory_tool(
+                action="replace",
+                target="memory",
+                old_text="old value",
+                content="new value",
+                store=store,
+            )
+        )
+        assert result["success"] is True
+        assert result["freshness"]["system_prompt_refresh"] == "next_session_or_compression"
 
     def test_replace_requires_old_text(self, store):
         result = json.loads(memory_tool(action="replace", content="new", store=store))

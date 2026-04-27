@@ -278,6 +278,26 @@ def _resolve_api_key(cfg: dict) -> str:
     return host_key or cfg.get("apiKey", "") or os.environ.get("HONCHO_API_KEY", "")
 
 
+def _resolve_base_url(cfg: dict) -> str:
+    """Resolve Honcho base URL with host -> root -> env fallback."""
+    host_block = (cfg.get("hosts") or {}).get(_host_key()) or {}
+    return (
+        host_block.get("baseUrl")
+        or host_block.get("base_url")
+        or cfg.get("baseUrl")
+        or cfg.get("base_url")
+        or os.environ.get("HONCHO_BASE_URL", "")
+    )
+
+
+def _has_auth_or_local_base_url(cfg: dict) -> bool:
+    """Return True when Honcho can connect via cloud API key or local no-auth URL."""
+    if _resolve_api_key(cfg):
+        return True
+    base_url = _resolve_base_url(cfg)
+    return any(h in base_url for h in ("localhost", "127.0.0.1", "::1"))
+
+
 def _prompt(label: str, default: str | None = None, secret: bool = False) -> str:
     suffix = f" [{default}]" if default else ""
     sys.stdout.write(f"  {label}{suffix}: ")
@@ -975,8 +995,8 @@ def cmd_tokens(args) -> None:
 def cmd_identity(args) -> None:
     """Seed AI peer identity or show both peer representations."""
     cfg = _read_config()
-    if not _resolve_api_key(cfg):
-        print("  No API key configured. Run 'hermes honcho setup' first.\n")
+    if not _has_auth_or_local_base_url(cfg):
+        print("  No API key or local Honcho base URL configured. Run 'hermes honcho setup' first.\n")
         return
 
     file_path = getattr(args, "file", None)

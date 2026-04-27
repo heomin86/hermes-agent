@@ -1597,6 +1597,8 @@ class AIAgent:
         self._memory_enabled = False
         self._user_profile_enabled = False
         self._memory_nudge_interval = 10
+        self._memory_prefetch_session_search_bridge = False
+        self._memory_prefetch_session_search_limit = 3
         self._turns_since_memory = 0
         self._iters_since_skill = 0
         if not skip_memory:
@@ -1605,6 +1607,12 @@ class AIAgent:
                 self._memory_enabled = mem_config.get("memory_enabled", False)
                 self._user_profile_enabled = mem_config.get("user_profile_enabled", False)
                 self._memory_nudge_interval = int(mem_config.get("nudge_interval", 10))
+                self._memory_prefetch_session_search_bridge = bool(
+                    mem_config.get("prefetch_session_search_bridge", False)
+                )
+                self._memory_prefetch_session_search_limit = int(
+                    mem_config.get("prefetch_session_search_limit", 3) or 0
+                )
                 if self._memory_enabled or self._user_profile_enabled:
                     from tools.memory_tool import MemoryStore
                     self._memory_store = MemoryStore(
@@ -4320,6 +4328,68 @@ class AIAgent:
             self._memory_manager.queue_prefetch_all(original_user_message)
         except Exception:
             pass
+
+    @staticmethod
+    def _looks_like_recall_request(message: str) -> bool:
+        lowered = (message or "").lower()
+        recall_terms = (
+            "remember",
+            "recall",
+            "previous",
+            "previously",
+            "last time",
+            "before",
+            "past",
+            "history",
+            "earlier",
+            "기억",
+            "전에",
+            "지난",
+            "이전",
+            "과거",
+        )
+        return any(term in lowered for term in recall_terms)
+
+    def _build_memory_prefetch_query(self, original_user_message: Any) -> str:
+        """Optionally enrich provider prefetch with bounded session-search snippets."""
+        query = original_user_message if isinstance(original_user_message, str) else ""
+        if not query.strip():
+            return query
+        if not getattr(self, "_memory_prefetch_session_search_bridge", False):
+            return query
+        if not self._looks_like_recall_request(query):
+            return query
+
+        session_db = getattr(self, "_session_db", None)
+        if not session_db:
+            return query
+
+        limit = max(
+            1,
+            min(int(getattr(self, "_memory_prefetch_session_search_limit", 3) or 3), 5),
+        )
+        try:
+            matches = session_db.search_messages(query, limit=limit)
+        except Exception:
+            return query
+
+        snippets = []
+        for match in matches or []:
+            if not isinstance(match, dict):
+                continue
+            text = str(match.get("snippet") or match.get("content") or "").strip()
+            if not text:
+                continue
+            text = sanitize_context(text).replace("\n", " ")
+            snippets.append(text[:500])
+            if len(snippets) >= limit:
+                break
+
+        if not snippets:
+            return query
+
+        prior = "\n".join(f"- {snippet}" for snippet in snippets)
+        return f"{query}\n\nRelevant prior session snippets for memory recall:\n{prior}"
 
     def release_clients(self) -> None:
         """Release LLM client resources WITHOUT tearing down session tool state.
@@ -9590,7 +9660,7 @@ class AIAgent:
         _ext_prefetch_cache = ""
         if self._memory_manager:
             try:
-                _query = original_user_message if isinstance(original_user_message, str) else ""
+                _query = self._build_memory_prefetch_query(original_user_message)
                 _ext_prefetch_cache = self._memory_manager.prefetch_all(_query) or ""
             except Exception:
                 pass

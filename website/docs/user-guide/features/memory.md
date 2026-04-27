@@ -142,6 +142,43 @@ The agent should then:
 
 **Best practice:** When memory is above 80% capacity (visible in the system prompt header), consolidate entries before adding new ones. For example, merge three separate "project uses X" entries into one comprehensive project description entry.
 
+### Inspect and Prune Memory Safely
+
+Use the memory maintenance commands before deleting anything:
+
+```bash
+hermes memory diagnostics
+hermes memory review --target memory --limit 10
+hermes memory compact --plan --target memory
+```
+
+`diagnostics` shows whether `MEMORY.md` or `USER.md` is near its character limit, whether an external provider is configured, and whether the optional session-search prefetch bridge is enabled.
+
+`review` lists the largest entries and exact duplicates by 1-based entry index. `compact --plan` is a dry-run plan only; it suggests duplicate removals or large entries to review, but does not change files.
+
+To remove one entry, preview it first:
+
+```bash
+hermes memory prune --target memory --entry-index 7 --dry-run
+```
+
+Apply only after checking the preview:
+
+```bash
+hermes memory prune --target memory --entry-index 7 --yes
+```
+
+`prune` never applies by default. It requires either `--dry-run` to preview or `--yes` to remove the selected entry. The output includes the entry preview and character savings. Passing both flags is rejected so a command cannot be both a preview and an apply.
+
+When `prune --yes` applies, Hermes writes a timestamped backup under `~/.hermes/memories/backups/` and prints the backup path. Restore from that backup with the same preview-first pattern:
+
+```bash
+hermes memory restore --target memory --backup-path ~/.hermes/memories/backups/MEMORY.md.bak.20260426T120000Z --dry-run
+hermes memory restore --target memory --backup-path ~/.hermes/memories/backups/MEMORY.md.bak.20260426T120000Z --yes
+```
+
+Restore only accepts backup files from the active profile's `memories/backups/` directory.
+
 ### Practical Examples of Good Memory Entries
 
 **Compact, information-dense entries work best:**

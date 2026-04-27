@@ -9051,6 +9051,118 @@ Examples:
         "setup", help="Interactive provider selection and configuration"
     )
     memory_sub.add_parser("status", help="Show current memory provider config")
+    _diagnostics_parser = memory_sub.add_parser(
+        "diagnostics", help="Show read-only memory recall diagnostics"
+    )
+    _diagnostics_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit diagnostics as JSON",
+    )
+    _review_parser = memory_sub.add_parser(
+        "review", help="Review built-in memory entries without changing them"
+    )
+    _review_parser.add_argument(
+        "--target",
+        choices=["all", "memory", "user"],
+        default="all",
+        help="Which store to review: all, memory, or user",
+    )
+    _review_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum entries to show per selected store",
+    )
+    _review_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit review as JSON",
+    )
+    _compact_parser = memory_sub.add_parser(
+        "compact", help="Build a read-only memory compaction plan"
+    )
+    _compact_parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="Generate a dry-run compaction plan",
+    )
+    _compact_parser.add_argument(
+        "--target",
+        choices=["all", "memory", "user"],
+        default="all",
+        help="Which store to plan for: all, memory, or user",
+    )
+    _compact_parser.add_argument(
+        "--max-actions",
+        type=int,
+        default=10,
+        help="Maximum suggested actions per selected store",
+    )
+    _compact_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit plan as JSON",
+    )
+    _prune_parser = memory_sub.add_parser(
+        "prune", help="Remove one built-in memory entry by review index"
+    )
+    _prune_parser.add_argument(
+        "--target",
+        choices=["memory", "user"],
+        required=True,
+        help="Which store to prune",
+    )
+    _prune_parser.add_argument(
+        "--entry-index",
+        type=int,
+        required=True,
+        help="1-based entry index shown by 'hermes memory review'",
+    )
+    _prune_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the removal without changing files",
+    )
+    _prune_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually remove the selected entry",
+    )
+    _prune_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit prune result as JSON",
+    )
+    _restore_parser = memory_sub.add_parser(
+        "restore", help="Restore a built-in memory store from a prune backup"
+    )
+    _restore_parser.add_argument(
+        "--target",
+        choices=["memory", "user"],
+        required=True,
+        help="Which store to restore",
+    )
+    _restore_parser.add_argument(
+        "--backup-path",
+        required=True,
+        help="Backup path created by 'hermes memory prune --yes'",
+    )
+    _restore_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the restore without changing files",
+    )
+    _restore_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually restore the selected backup",
+    )
+    _restore_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit restore result as JSON",
+    )
     memory_sub.add_parser("off", help="Disable external provider (built-in only)")
     _reset_parser = memory_sub.add_parser(
         "reset",

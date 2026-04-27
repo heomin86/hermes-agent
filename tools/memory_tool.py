@@ -383,6 +383,11 @@ class MemoryStore:
             "entries": entries,
             "usage": f"{pct}% — {current:,}/{limit:,} chars",
             "entry_count": len(entries),
+            "freshness": {
+                "durable": True,
+                "live_tool_state": True,
+                "system_prompt_refresh": "next_session_or_compression",
+            },
         }
         if message:
             resp["message"] = message
@@ -578,7 +583,6 @@ registry.register(
     check_fn=check_memory_requirements,
     emoji="🧠",
 )
-
 
 
 

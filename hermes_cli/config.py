@@ -758,6 +758,10 @@ DEFAULT_CONFIG = {
         # "hindsight", "holographic", "retaindb", "byterover".
         # Only ONE external provider is allowed at a time.
         "provider": "",
+        # Opt-in bridge: enrich external memory-provider prefetch queries with
+        # compact session_search snippets when the user asks for past context.
+        "prefetch_session_search_bridge": False,
+        "prefetch_session_search_limit": 3,
     },
 
     # Subagent delegation — override the provider:model used by delegate_task
