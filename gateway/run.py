@@ -3715,6 +3715,18 @@ class GatewayRunner:
             if _cmd_def_inner and _cmd_def_inner.name == "agents":
                 return await self._handle_agents_command(event)
 
+            if _cmd_def_inner and _cmd_def_inner.name == "sessions":
+                return await self._handle_sessions_command(event)
+
+            if _cmd_def_inner and _cmd_def_inner.name == "tmux":
+                return await self._handle_tmux_command(event)
+
+            if _cmd_def_inner and _cmd_def_inner.name == "send":
+                return await self._handle_send_command(event)
+
+            if _cmd_def_inner and _cmd_def_inner.name == "dashboard":
+                return await self._handle_dashboard_command(event)
+
             # /background must bypass the running-agent guard — it starts a
             # parallel task and must never interrupt the active conversation.
             # /btw is an alias of /background and resolves to the same canonical
@@ -3939,6 +3951,18 @@ class GatewayRunner:
 
         if canonical == "agents":
             return await self._handle_agents_command(event)
+
+        if canonical == "sessions":
+            return await self._handle_sessions_command(event)
+
+        if canonical == "tmux":
+            return await self._handle_tmux_command(event)
+
+        if canonical == "send":
+            return await self._handle_send_command(event)
+
+        if canonical == "dashboard":
+            return await self._handle_dashboard_command(event)
 
         if canonical == "restart":
             return await self._handle_restart_command(event)
@@ -5550,6 +5574,80 @@ class GatewayRunner:
             lines.append("No active agents or running tasks.")
 
         return "\n".join(lines)
+
+    async def _handle_sessions_command(self, event: MessageEvent) -> str:
+        """Handle /sessions [limit] — list recent Hermes sessions."""
+        from gateway.terminal_control import list_hermes_sessions
+
+        raw_args = event.get_command_args().strip()
+        limit = 20
+        if raw_args:
+            first = raw_args.split()[0]
+            try:
+                limit = int(first)
+            except ValueError:
+                return "Usage: /sessions [limit]"
+        return list_hermes_sessions(limit)
+
+    async def _handle_tmux_command(self, event: MessageEvent) -> str:
+        """Handle /tmux [list|capture <target> [lines]|stop <target>]."""
+        from gateway.terminal_control import (
+            capture_tmux_pane,
+            list_tmux_panes,
+            normalize_tmux_session_names,
+            stop_tmux_pane,
+        )
+
+        raw_args = event.get_command_args().strip()
+        if not raw_args or raw_args == "list":
+            return list_tmux_panes()
+
+        parts = raw_args.split()
+        subcommand = parts[0].lower()
+        if subcommand == "capture":
+            if len(parts) < 2:
+                return "Usage: /tmux capture <session[:window.pane]> [lines]"
+            lines = 80
+            if len(parts) >= 3:
+                try:
+                    lines = int(parts[2])
+                except ValueError:
+                    return "Usage: /tmux capture <session[:window.pane]> [lines]"
+            return capture_tmux_pane(parts[1], lines)
+        if subcommand == "stop":
+            if len(parts) < 2:
+                return "Usage: /tmux stop <session[:window.pane]>"
+            return stop_tmux_pane(parts[1])
+        if subcommand in ("normalize", "rename"):
+            prefix = parts[1] if len(parts) >= 2 else "hermes"
+            return normalize_tmux_session_names(prefix)
+
+        # Convenience: /tmux 5:0.0 80 means capture target with optional lines.
+        lines = 80
+        if len(parts) >= 2:
+            try:
+                lines = int(parts[1])
+            except ValueError:
+                return "Usage: /tmux [list|capture <target> [lines]|stop <target>]"
+        return capture_tmux_pane(parts[0], lines)
+
+    async def _handle_send_command(self, event: MessageEvent) -> str:
+        """Handle /send <target> <message> — send text to a tmux pane."""
+        from gateway.terminal_control import send_tmux_keys
+
+        raw_args = event.get_command_args().strip()
+        if not raw_args:
+            return "Usage: /send <session[:window.pane]> <message>"
+        parts = raw_args.split(maxsplit=1)
+        if len(parts) < 2 or not parts[1].strip():
+            return "Usage: /send <session[:window.pane]> <message>"
+        return send_tmux_keys(parts[0], parts[1])
+
+    async def _handle_dashboard_command(self, event: MessageEvent) -> str:
+        """Handle /dashboard — compact gateway operator dashboard."""
+        from gateway.terminal_control import build_operator_dashboard
+
+        return build_operator_dashboard()
     
     async def _handle_stop_command(self, event: MessageEvent) -> str:
         """Handle /stop command - interrupt a running agent.
