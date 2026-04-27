@@ -12,6 +12,11 @@ from agent.anthropic_adapter import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _enable_keychain_for_keychain_tests(monkeypatch):
+    monkeypatch.delenv("HERMES_DISABLE_CLAUDE_CODE_KEYCHAIN", raising=False)
+
+
 class TestReadClaudeCodeCredentialsFromKeychain:
     """Bug 4: macOS Keychain support for Claude Code >=2.1.114."""
 

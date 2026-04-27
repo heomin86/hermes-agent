@@ -12,8 +12,7 @@ because _wait_for_process never got to call _kill_process before python
 died.  See commit message for full context.
 """
 import os
-import signal
-import subprocess
+import shlex
 import threading
 import time
 
@@ -43,9 +42,7 @@ def test_wait_for_process_kills_subprocess_on_keyboardinterrupt():
     env = LocalEnvironment(cwd="/tmp")
     try:
         result_holder = {}
-        proc_holder = {}
-        started = threading.Event()
-        raise_at = [None]  # set by the main thread to tell worker when
+        pid_file = f"/tmp/hermes-interrupt-{os.getpid()}-{time.time_ns()}.pid"
 
         # Drive execute() on a separate thread so we can SIGNAL-interrupt it
         # via a thread-targeted exception without killing our test process.
@@ -54,40 +51,27 @@ def test_wait_for_process_kills_subprocess_on_keyboardinterrupt():
             # to observe the cleanup, via env.execute(...) — the normal path
             # that goes through _wait_for_process.
             try:
-                result_holder["result"] = env.execute("sleep 30", timeout=60)
+                result_holder["result"] = env.execute(
+                    f'printf "%s" "$$" > {shlex.quote(pid_file)}; sleep 30',
+                    timeout=60,
+                )
             except BaseException as e:  # noqa: BLE001 — we want to observe it
                 result_holder["exception"] = type(e).__name__
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
-        # Wait until the subprocess actually exists.  LocalEnvironment.execute
-        # does init_session() (one spawn) before the real command, so we need
-        # to wait until a sleep 30 is visible.  Use pgrep-style lookup via
-        # /proc to find the bash process running our sleep.
+        # Wait until the command shell has recorded its PID. This avoids
+        # platform-specific psutil/ps differences in child cmdline rendering.
         deadline = time.monotonic() + 5.0
         target_pid = None
         while time.monotonic() < deadline:
-            # Walk our children and grand-children to find one running 'sleep 30'
             try:
-                import psutil  # optional — fall back if absent
-                for p in psutil.Process(os.getpid()).children(recursive=True):
-                    try:
-                        if "sleep 30" in " ".join(p.cmdline()):
-                            target_pid = p.pid
-                            break
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-            except ImportError:
-                # Fall back to ps
-                ps = subprocess.run(
-                    ["ps", "-eo", "pid,ppid,pgid,cmd"], capture_output=True, text=True,
-                )
-                for line in ps.stdout.splitlines():
-                    if "sleep 30" in line and "grep" not in line:
-                        parts = line.split()
-                        if parts and parts[0].isdigit():
-                            target_pid = int(parts[0])
-                            break
+                with open(pid_file, encoding="utf-8") as f:
+                    raw_pid = f.read().strip()
+                if raw_pid:
+                    target_pid = int(raw_pid)
+            except (FileNotFoundError, ValueError):
+                target_pid = None
             if target_pid:
                 break
             time.sleep(0.1)
@@ -139,6 +123,10 @@ def test_wait_for_process_kills_subprocess_on_keyboardinterrupt():
             f"propagation after cleanup"
         )
     finally:
+        try:
+            os.unlink(pid_file)
+        except Exception:
+            pass
         try:
             env.cleanup()
         except Exception:

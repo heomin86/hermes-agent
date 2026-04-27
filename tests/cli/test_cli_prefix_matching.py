@@ -107,6 +107,24 @@ class TestSlashCommandPrefixMatching:
         unknown = any("Unknown command" in p for p in printed)
         assert not unknown, f"Expected skill prefix to match, got: {printed}"
 
+    def test_multiline_skill_command_queues_skill_message_with_remaining_text(self):
+        """/skill-name followed by pasted text on the next line is a skill invocation."""
+        cli_obj = _make_cli()
+        fake_skill = {"/writing-assistant": {"name": "writing-assistant", "description": "test"}}
+        user_text = "챗GPT 등장 이후 지금까지 쉼 없이 달려왔습니다."
+
+        import cli as cli_mod
+        with patch.object(cli_mod, '_skill_commands', fake_skill), \
+             patch.object(cli_mod, 'build_skill_invocation_message', return_value='SKILL_MESSAGE') as mock_build:
+            cli_obj.process_command(f"/writing-assistant\n{user_text}")
+
+        mock_build.assert_called_once_with(
+            "/writing-assistant",
+            user_text,
+            task_id=cli_obj.session_id,
+        )
+        cli_obj._pending_input.put.assert_called_once_with('SKILL_MESSAGE')
+
     def test_ambiguous_between_builtin_and_skill(self):
         """Ambiguous prefix spanning builtin + skill commands shows suggestions."""
         cli_obj = _make_cli()

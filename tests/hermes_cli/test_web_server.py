@@ -1845,31 +1845,52 @@ class TestPtyWebSocket:
             assert b"round-trip-payload" in buf
 
     def test_resize_escape_is_forwarded(self, monkeypatch):
-        # Resize escape gets intercepted and applied via TIOCSWINSZ,
-        # then ``tput cols/lines`` reports the new dimensions back.
+        # The PTY bridge itself has an ioctl integration test. Here we only
+        # verify the websocket consumes the resize escape and forwards the
+        # parsed dimensions to the bridge instead of writing the escape bytes.
+        import threading
+        import time
+
+        resize_seen = threading.Event()
+
+        class FakeBridge:
+            def __init__(self):
+                self.closed = False
+                self.resizes = []
+                self.writes = []
+
+            def read(self, timeout=0.2):
+                time.sleep(min(float(timeout), 0.01))
+                return None if self.closed else b""
+
+            def resize(self, cols: int, rows: int):
+                self.resizes.append((cols, rows))
+                resize_seen.set()
+
+            def write(self, raw: bytes):
+                self.writes.append(raw)
+
+            def close(self):
+                self.closed = True
+
+        fake_bridge = FakeBridge()
+
         monkeypatch.setattr(
             self.ws_module,
             "_resolve_chat_argv",
-            # sleep gives the test time to push the resize before tput runs
-            lambda resume=None, sidecar_url=None: (
-                ["/bin/sh", "-c", "sleep 0.15; tput cols; tput lines"],
-                None,
-                None,
-            ),
+            lambda resume=None, sidecar_url=None: (["/bin/cat"], None, None),
+        )
+        monkeypatch.setattr(
+            self.ws_module.PtyBridge,
+            "spawn",
+            classmethod(lambda cls, *args, **kwargs: fake_bridge),
         )
         with self.client.websocket_connect(self._url()) as conn:
             conn.send_text("\x1b[RESIZE:99;41]")
-            buf = b""
-            import time
+            assert resize_seen.wait(timeout=2.0)
 
-            deadline = time.monotonic() + 5.0
-            while time.monotonic() < deadline:
-                frame = conn.receive_bytes()
-                if frame:
-                    buf += frame
-                if b"99" in buf and b"41" in buf:
-                    break
-            assert b"99" in buf and b"41" in buf
+        assert fake_bridge.resizes == [(99, 41)]
+        assert fake_bridge.writes == []
 
     def test_unavailable_platform_closes_with_message(self, monkeypatch):
         from hermes_cli.pty_bridge import PtyUnavailableError

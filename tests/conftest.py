@@ -174,6 +174,9 @@ _HERMES_BEHAVIORAL_VARS = frozenset({
     "HERMES_SESSION_KEY",
     "HERMES_GATEWAY_SESSION",
     "HERMES_PLATFORM",
+    "HERMES_MODEL",
+    "HERMES_INFERENCE_MODEL",
+    "HERMES_TUI_PROVIDER",
     "HERMES_INFERENCE_PROVIDER",
     "HERMES_MANAGED",
     "HERMES_DEV",
@@ -279,6 +282,7 @@ def _hermetic_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
     monkeypatch.setenv("AWS_METADATA_SERVICE_TIMEOUT", "1")
     monkeypatch.setenv("AWS_METADATA_SERVICE_NUM_ATTEMPTS", "1")
+    monkeypatch.setenv("HERMES_DISABLE_CLAUDE_CODE_KEYCHAIN", "1")
 
     # 5. Reset plugin singleton so tests don't leak plugins from
     #    ~/.hermes/plugins/ (which, per step 3, is now empty — but the
@@ -393,6 +397,20 @@ def _reset_module_state():
             _ft_mod._read_tracker.clear()
         with _ft_mod._file_ops_lock:
             _ft_mod._file_ops_cache.clear()
+    except Exception:
+        pass
+
+    # --- tools.terminal_tool — active env registry influences file path
+    # resolution via live cwd lookup. Clear it so relative-path tests do not
+    # inherit a stale default task environment from a previous test.
+    try:
+        from tools import terminal_tool as _term_mod
+        with _term_mod._env_lock:
+            _term_mod._active_environments.clear()
+            _term_mod._last_activity.clear()
+        with _term_mod._creation_locks_lock:
+            _term_mod._creation_locks.clear()
+        _term_mod._task_env_overrides.clear()
     except Exception:
         pass
 

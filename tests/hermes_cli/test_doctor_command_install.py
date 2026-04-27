@@ -253,6 +253,12 @@ class TestDoctorCommandInstallation:
         monkeypatch.setattr(doctor_mod, "PROJECT_ROOT", project)
         monkeypatch.setattr(doctor_mod, "_DHH", str(home))
         monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setitem(
+            sys.modules,
+            "discord",
+            types.SimpleNamespace(__name__="discord"),
+        )
+        monkeypatch.setattr(doctor_mod.shutil, "which", lambda *a, **kw: None)
 
         fake_model_tools = types.SimpleNamespace(
             check_tool_availability=lambda *a, **kw: ([], []),

@@ -488,6 +488,9 @@ def _read_claude_code_credentials_from_keychain() -> Optional[Dict[str, Any]]:
 
     Returns dict with {accessToken, refreshToken?, expiresAt?} or None.
     """
+    if os.getenv("HERMES_DISABLE_CLAUDE_CODE_KEYCHAIN"):
+        return None
+
     import platform
     import subprocess
 
@@ -1711,5 +1714,4 @@ def build_anthropic_kwargs(
         kwargs["extra_headers"] = {"anthropic-beta": ",".join(betas)}
 
     return kwargs
-
 

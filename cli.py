@@ -1398,7 +1398,10 @@ def _resolve_attachment_path(raw_path: str) -> Path | None:
     except Exception:
         resolved = path
 
-    if not resolved.exists() or not resolved.is_file():
+    try:
+        if not resolved.exists() or not resolved.is_file():
+            return None
+    except OSError:
         return None
     return resolved
 
@@ -1479,6 +1482,16 @@ def _detect_file_drop(user_input: str) -> "dict | None":
         or (len(stripped) >= 4 and stripped[0] in ("'", '"') and stripped[2] == ":" and stripped[3] in ("\\", "/") and stripped[1].isalpha())
     )
     if not starts_like_path:
+        return None
+
+    # Slash commands must win over file-drop detection, including multi-line
+    # invocations such as:
+    #   /writing-assistant
+    #   polish this text
+    # Without this guard, the whole pasted block can be probed as an absolute
+    # path and long content raises OSError(ENAMETOOLONG) before command
+    # dispatch has a chance to load the skill.
+    if stripped.startswith("/") and _looks_like_slash_command(stripped):
         return None
 
     direct_path = _resolve_attachment_path(stripped)

@@ -498,7 +498,10 @@ class TestCmdCleanup:
         (ws / "todo.json").write_text("{}")
 
         args = Namespace(source=None, dry_run=True, yes=False)
-        with patch.object(claw_mod, "_find_openclaw_dirs", return_value=[openclaw]):
+        with (
+            patch.object(claw_mod, "_find_openclaw_dirs", return_value=[openclaw]),
+            patch.object(claw_mod, "_detect_openclaw_processes", return_value=[]),
+        ):
             claw_mod._cmd_cleanup(args)
 
         captured = capsys.readouterr()
@@ -531,6 +534,7 @@ class TestCmdCleanup:
         args = Namespace(source=None, dry_run=False, yes=False)
         with (
             patch.object(claw_mod, "_find_openclaw_dirs", return_value=[openclaw]),
+            patch.object(claw_mod, "_detect_openclaw_processes", return_value=[]),
             patch.object(claw_mod, "prompt_yes_no", return_value=False),
             patch("sys.stdin", mock_stdin),
         ):
@@ -561,7 +565,10 @@ class TestCmdCleanup:
         (ws / "SOUL.md").write_text("# Soul")
 
         args = Namespace(source=None, dry_run=True, yes=False)
-        with patch.object(claw_mod, "_find_openclaw_dirs", return_value=[openclaw]):
+        with (
+            patch.object(claw_mod, "_find_openclaw_dirs", return_value=[openclaw]),
+            patch.object(claw_mod, "_detect_openclaw_processes", return_value=[]),
+        ):
             claw_mod._cmd_cleanup(args)
 
         captured = capsys.readouterr()

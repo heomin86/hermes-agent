@@ -52,6 +52,14 @@ class TestNonFileInputs:
     def test_slash_command_with_args(self):
         assert _detect_file_drop("/config set key value") is None
 
+    def test_multiline_slash_command_with_text_is_not_file_drop(self):
+        user_input = "/writing-assistant\n" + ("챗GPT 등장 이후 " * 200)
+        assert _detect_file_drop(user_input) is None
+
+    def test_very_long_slash_command_payload_does_not_raise_filename_too_long(self):
+        user_input = "/writing-assistant\n" + ("x" * 5000)
+        assert _detect_file_drop(user_input) is None
+
     def test_empty_string(self):
         assert _detect_file_drop("") is None
 

@@ -20,3 +20,17 @@ def test_manifest_includes_bundled_skills():
 
     assert "graft skills" in manifest
     assert "graft optional-skills" in manifest
+
+
+def test_default_pytest_addopts_do_not_require_xdist():
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    addopts = data["tool"]["pytest"]["ini_options"].get("addopts", "")
+
+    assert "-n" not in addopts.split()
+
+
+def test_canonical_test_runner_does_not_require_pip_installs():
+    runner = (REPO_ROOT / "scripts" / "run_tests.sh").read_text(encoding="utf-8")
+
+    assert "python -m pip install" not in runner
+    assert "pytest_split" not in runner
